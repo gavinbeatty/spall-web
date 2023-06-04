@@ -95,7 +95,7 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <x86intrin.h>
+#include <immintrin.h>
 
 #if !SPALL_IS_WINDOWS
     #include <time.h>
@@ -126,7 +126,8 @@ extern "C" {
     #define SPALL_NOINSTRUMENT // Can't noinstrument on MSVC!
     #define SPALL_FORCEINLINE __forceinline
 
-    #define Spall_Atomic(X) volatile (X)
+    #define Spall_Atomic(X) volatile X
+    #define Spall_Atomic_load(p) *(p)
 #else
     #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
     #define SPALL_FORCEINLINE __attribute__((always_inline))
@@ -136,6 +137,11 @@ extern "C" {
         #define Spall_Atomic(X) std::atomic<X>
     #else
         #define Spall_Atomic(X) _Atomic (X)
+    #endif
+    #if SPALL_IS_GCC && !defined(__clang__)
+        #define Spall_Atomic_load(p) atomic_load(p)
+    #else
+        #define Spall_Atomic_load(p) __c11_atomic_load((p), __ATOMIC_SEQ_CST)
     #endif
 #endif
 
@@ -449,7 +455,7 @@ SPALL_FN void *spall_writer(void *arg) {
         if (buffer->writer.ptr == 0) { continue; }
 
         size_t size = buffer->writer.size;
-        void *buffer_ptr = (void *)atomic_load(&buffer->writer.ptr);
+        void *buffer_ptr = (void *)Spall_Atomic_load(&buffer->writer.ptr);
         buffer->writer.ptr = 0;
 
         fwrite(buffer_ptr, size, 1, spall_ctx.file);
